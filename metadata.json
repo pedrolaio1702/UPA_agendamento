@@ -1,0 +1,7 @@
+{
+  "name": "UPA Agendamentos - Sistema de Saúde",
+  "description": "Sistema digital para agendamento de consultas em Unidades de Pronto Atendimento (UPA), otimizado para facilitar o acesso à saúde pública com conformidade LGPD.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

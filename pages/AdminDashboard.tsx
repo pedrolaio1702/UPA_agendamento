@@ -1,0 +1,407 @@
+
+import React, { useState, useEffect } from 'react';
+import { Appointment, UPA, AdminRole, AdminUser } from '../types';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { UPAS as INITIAL_UPAS, LOCATIONS } from '../constants';
+
+const AdminDashboard: React.FC = () => {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [upas, setUpas] = useState<UPA[]>([]);
+  
+  // Mock current logged in user (simulated)
+  const [currentUser, setCurrentUser] = useState<AdminUser>({ role: 'GLOBAL' });
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'management'>('dashboard');
+
+  // UPA Registration Form State
+  const [isAddingUpa, setIsAddingUpa] = useState(false);
+  const [newUpa, setNewUpa] = useState<Partial<UPA>>({
+    name: '', city: '', state: '', address: '', specialties: [], waitingTime: 'Médio'
+  });
+
+  useEffect(() => {
+    const storedAppointments = JSON.parse(localStorage.getItem('upa_appointments') || '[]');
+    setAppointments(storedAppointments);
+
+    const storedUpas = JSON.parse(localStorage.getItem('upa_list') || JSON.stringify(INITIAL_UPAS));
+    setUpas(storedUpas);
+    if (!localStorage.getItem('upa_list')) {
+      localStorage.setItem('upa_list', JSON.stringify(INITIAL_UPAS));
+    }
+  }, []);
+
+  const handleAddUpa = () => {
+    if (!newUpa.name || !newUpa.city || !newUpa.state) return;
+    const upaToAdd: UPA = {
+      ...newUpa as UPA,
+      id: Math.random().toString(36).substr(2, 9),
+      specialties: ['Clínico Geral'] // Default
+    };
+    const updatedUpas = [...upas, upaToAdd];
+    setUpas(updatedUpas);
+    localStorage.setItem('upa_list', JSON.stringify(updatedUpas));
+    setIsAddingUpa(false);
+    setNewUpa({ name: '', city: '', state: '', address: '', specialties: [], waitingTime: 'Médio' });
+  };
+
+  // Filtering Logic based on Role
+  const filteredAppointments = appointments.filter(a => {
+    if (currentUser.role === 'GLOBAL') return true;
+    const upa = upas.find(u => u.id === a.upaId);
+    if (currentUser.role === 'STATE') return upa?.state === currentUser.state;
+    if (currentUser.role === 'UPA') return a.upaId === currentUser.upaId;
+    return false;
+  });
+
+  const filteredUpas = upas.filter(u => {
+    if (currentUser.role === 'GLOBAL') return true;
+    if (currentUser.role === 'STATE') return u.state === currentUser.state;
+    if (currentUser.role === 'UPA') return u.id === currentUser.upaId;
+    return false;
+  });
+
+  // Chart Data Preparation
+  const statusData = [
+    { name: 'Agendados', value: filteredAppointments.filter(a => a.status === 'scheduled').length },
+    { name: 'Cancelados', value: filteredAppointments.filter(a => a.status === 'canceled').length },
+    { name: 'Realizados', value: filteredAppointments.filter(a => a.status === 'completed').length },
+  ];
+
+  const upaCounts = filteredAppointments.reduce((acc: any, curr) => {
+    acc[curr.upaName] = (acc[curr.upaName] || 0) + 1;
+    return acc;
+  }, {});
+  const barData = Object.keys(upaCounts).map(name => ({ name, total: upaCounts[name] }));
+
+  const ratings = filteredAppointments.filter(a => a.rating !== undefined).map(a => a.rating as number);
+  const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : "0.0";
+  const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b'];
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* Role Switcher (Simulator) */}
+      <div className="bg-slate-800 text-white p-4 rounded-xl mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center font-bold">
+            {currentUser.role[0]}
+          </div>
+          <div>
+            <p className="text-xs text-slate-400 font-bold uppercase">Visão Atual</p>
+            <p className="font-bold">
+              {currentUser.role === 'GLOBAL' && 'Administrador Federal (SUS)'}
+              {currentUser.role === 'STATE' && `Secretaria Estadual de Saúde (${currentUser.state})`}
+              {currentUser.role === 'UPA' && `Gestor: ${upas.find(u => u.id === currentUser.upaId)?.name || 'Unidade'}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setCurrentUser({ role: 'GLOBAL' })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${currentUser.role === 'GLOBAL' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+          >
+            Global
+          </button>
+          <button 
+            onClick={() => setCurrentUser({ role: 'STATE', state: 'SP' })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${currentUser.role === 'STATE' && currentUser.state === 'SP' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+          >
+            Secr. SP
+          </button>
+          <button 
+            onClick={() => setCurrentUser({ role: 'UPA', upaId: '1' })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${currentUser.role === 'UPA' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+          >
+            UPA Central
+          </button>
+        </div>
+      </div>
+
+      <div className="flex border-b border-slate-200 mb-8">
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`px-6 py-3 font-bold border-b-2 transition-all ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+        >
+          Monitoramento (BI)
+        </button>
+        {currentUser.role !== 'UPA' && (
+          <button 
+            onClick={() => setActiveTab('management')}
+            className={`px-6 py-3 font-bold border-b-2 transition-all ${activeTab === 'management' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          >
+            Gestão de Unidades
+          </button>
+        )}
+      </div>
+
+      {activeTab === 'dashboard' ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <p className="text-xs text-slate-500 font-bold uppercase mb-1">Satisfação Média</p>
+              <div className="flex items-center gap-2">
+                <p className="text-4xl font-extrabold text-yellow-500">{avgRating}</p>
+                <div className="text-yellow-400">
+                  <svg className="w-6 h-6 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <p className="text-xs text-slate-500 font-bold uppercase mb-1">Total de Agendamentos</p>
+              <p className="text-4xl font-extrabold text-blue-600">{filteredAppointments.length}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <p className="text-xs text-slate-500 font-bold uppercase mb-1">Consultas Realizadas</p>
+              <p className="text-4xl font-extrabold text-green-600">
+                {filteredAppointments.filter(a => a.status === 'completed').length}
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <p className="text-xs text-slate-500 font-bold uppercase mb-1">Unidades no Escopo</p>
+              <p className="text-4xl font-extrabold text-slate-800">{filteredUpas.length}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-bold mb-6">Produtividade por Unidade</h3>
+              <div className="h-64">
+                {barData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" fontSize={10} interval={0} />
+                      <YAxis fontSize={12} />
+                      <Tooltip />
+                      <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400 italic">Dados insuficientes</div>
+                )}
+              </div>
+            </div>
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-bold mb-6">Taxa de Ocupação/Status</h3>
+              <div className="h-64 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {statusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2 ml-4 min-w-[120px]">
+                  {statusData.map((s, i) => (
+                    <div key={s.name} className="flex items-center gap-2 text-sm">
+                      <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i]}}></div>
+                      <span className="text-slate-600">{s.name}: {s.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-bold text-lg">Logs de Atividades Filtrados</h3>
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold">LIVE</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
+                  <tr>
+                    <th className="px-6 py-4">Data Log</th>
+                    <th className="px-6 py-4">Paciente</th>
+                    <th className="px-6 py-4">Unidade</th>
+                    <th className="px-6 py-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {filteredAppointments.slice(-10).reverse().map((a, i) => (
+                    <tr key={a.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 text-slate-500">22/05/2024</td>
+                      <td className="px-6 py-4 font-medium text-slate-800">{a.patientName}</td>
+                      <td className="px-6 py-4 text-slate-600">{a.upaName}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                          a.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 
+                          a.status === 'canceled' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {a.status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredAppointments.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-10 text-center text-slate-400">Nenhuma atividade encontrada neste escopo.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Management Tab - UPA CRUD */
+        <div className="space-y-8 animate-in fade-in duration-300">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">Unidades de Pronto Atendimento</h2>
+              <p className="text-sm text-slate-500">Gestão cadastral e operacional das UPAs em seu território.</p>
+            </div>
+            <button 
+              onClick={() => setIsAddingUpa(true)}
+              className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+              Nova Unidade
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
+                <tr>
+                  <th className="px-6 py-4">ID</th>
+                  <th className="px-6 py-4">Nome da Unidade</th>
+                  <th className="px-6 py-4">Localização</th>
+                  <th className="px-6 py-4">Status Espera</th>
+                  <th className="px-6 py-4">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {filteredUpas.map(upa => (
+                  <tr key={upa.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-mono text-slate-400">#{upa.id}</td>
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-slate-800">{upa.name}</div>
+                      <div className="text-xs text-slate-500">{upa.address}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-slate-800">{upa.city}</div>
+                      <div className="text-xs font-bold text-blue-600">{upa.state}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                        upa.waitingTime === 'Baixo' ? 'bg-green-100 text-green-700' :
+                        upa.waitingTime === 'Médio' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {upa.waitingTime.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                        <button className="p-2 text-slate-400 hover:text-red-600 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Registration Modal Overlay */}
+          {isAddingUpa && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-200">
+                <h3 className="text-2xl font-bold mb-6">Cadastrar Nova UPA</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Unidade</label>
+                    <input 
+                      type="text" 
+                      className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Ex: UPA Bom Jesus"
+                      value={newUpa.name}
+                      onChange={e => setNewUpa({...newUpa, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
+                      <select 
+                        className="w-full p-3 border border-slate-300 rounded-lg"
+                        value={newUpa.state}
+                        onChange={e => setNewUpa({...newUpa, state: e.target.value})}
+                      >
+                        <option value="">Selecione</option>
+                        {LOCATIONS.map(l => <option key={l.state} value={l.state}>{l.state}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
+                      <input 
+                        type="text" 
+                        className="w-full p-3 border border-slate-300 rounded-lg"
+                        placeholder="Ex: Porto Alegre"
+                        value={newUpa.city}
+                        onChange={e => setNewUpa({...newUpa, city: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Endereço Completo</label>
+                    <input 
+                      type="text" 
+                      className="w-full p-3 border border-slate-300 rounded-lg"
+                      placeholder="Logradouro, número, bairro..."
+                      value={newUpa.address}
+                      onChange={e => setNewUpa({...newUpa, address: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Tempo de Espera Inicial</label>
+                    <div className="flex gap-2">
+                      {['Baixo', 'Médio', 'Alto'].map(lvl => (
+                        <button 
+                          key={lvl}
+                          onClick={() => setNewUpa({...newUpa, waitingTime: lvl})}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${newUpa.waitingTime === lvl ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 text-slate-600'}`}
+                        >
+                          {lvl.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setIsAddingUpa(false)}
+                    className="flex-1 py-4 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleAddUpa}
+                    className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+                  >
+                    Salvar Unidade
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminDashboard;
