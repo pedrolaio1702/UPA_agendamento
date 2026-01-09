@@ -16,10 +16,11 @@ const AdminDashboard: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AdminUser>({ role: 'GLOBAL' });
   const [activeTab, setActiveTab] = useState<'dashboard' | 'management' | 'doctors'>('dashboard');
 
-  // UPA Registration Form State
-  const [isAddingUpa, setIsAddingUpa] = useState(false);
-  const [newUpa, setNewUpa] = useState<Partial<UPA>>({
-    name: '', city: '', state: '', address: '', specialties: [], waitingTime: 'Médio'
+  // UPA Management Modal State
+  const [isUpaModalOpen, setIsUpaModalOpen] = useState(false);
+  const [editingUpaId, setEditingUpaId] = useState<string | null>(null);
+  const [upaFormData, setUpaFormData] = useState<Partial<UPA>>({
+    name: '', city: '', state: '', address: '', specialties: ['Clínico Geral'], waitingTime: 'Médio'
   });
 
   // Doctor Registration Form State
@@ -42,18 +43,43 @@ const AdminDashboard: React.FC = () => {
     setDoctors(storedDoctors);
   }, []);
 
-  const handleAddUpa = () => {
-    if (!newUpa.name || !newUpa.city || !newUpa.state) return;
-    const upaToAdd: UPA = {
-      ...newUpa as UPA,
-      id: Math.random().toString(36).substr(2, 9),
-      specialties: ['Clínico Geral'] // Default
-    };
-    const updatedUpas = [...upas, upaToAdd];
+  const openUpaModal = (upa?: UPA) => {
+    if (upa) {
+      setEditingUpaId(upa.id);
+      setUpaFormData({ ...upa });
+    } else {
+      setEditingUpaId(null);
+      setUpaFormData({ name: '', city: '', state: '', address: '', specialties: ['Clínico Geral'], waitingTime: 'Médio' });
+    }
+    setIsUpaModalOpen(true);
+  };
+
+  const handleSaveUpa = () => {
+    if (!upaFormData.name || !upaFormData.city || !upaFormData.state) return;
+
+    let updatedUpas: UPA[];
+    if (editingUpaId) {
+      updatedUpas = upas.map(u => u.id === editingUpaId ? { ...u, ...upaFormData as UPA } : u);
+    } else {
+      const upaToAdd: UPA = {
+        ...upaFormData as UPA,
+        id: Math.random().toString(36).substr(2, 9)
+      };
+      updatedUpas = [...upas, upaToAdd];
+    }
+
     setUpas(updatedUpas);
     localStorage.setItem('upa_list', JSON.stringify(updatedUpas));
-    setIsAddingUpa(false);
-    setNewUpa({ name: '', city: '', state: '', address: '', specialties: [], waitingTime: 'Médio' });
+    setIsUpaModalOpen(false);
+  };
+
+  const handleToggleSpecialty = (specialty: string) => {
+    const currentSpecs = upaFormData.specialties || [];
+    if (currentSpecs.includes(specialty)) {
+      setUpaFormData({ ...upaFormData, specialties: currentSpecs.filter(s => s !== specialty) });
+    } else {
+      setUpaFormData({ ...upaFormData, specialties: [...currentSpecs, specialty] });
+    }
   };
 
   const handleAddDoctor = () => {
@@ -270,7 +296,7 @@ const AdminDashboard: React.FC = () => {
             </div>
             {currentUser.role !== 'UPA' && (
               <button 
-                onClick={() => setIsAddingUpa(true)}
+                onClick={() => openUpaModal()}
                 className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
@@ -315,7 +341,11 @@ const AdminDashboard: React.FC = () => {
                         <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Ver Médicos desta UPA" onClick={() => { setActiveTab('doctors'); setNewDoctor({...newDoctor, upaId: upa.id}); }}>
                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                         </button>
-                        <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                        <button 
+                          className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                          onClick={() => openUpaModal(upa)}
+                          title="Editar Unidade"
+                        >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                         </button>
                       </div>
@@ -407,11 +437,11 @@ const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* UPA Registration Modal Overlay */}
-      {isAddingUpa && (
+      {/* UPA Management Modal Overlay (Add/Edit) */}
+      {isUpaModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-200">
-            <h3 className="text-2xl font-bold mb-6">Cadastrar Nova UPA</h3>
+          <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold mb-6">{editingUpaId ? 'Editar Unidade' : 'Cadastrar Nova UPA'}</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Unidade</label>
@@ -419,8 +449,8 @@ const AdminDashboard: React.FC = () => {
                   type="text" 
                   className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                   placeholder="Ex: UPA Bom Jesus"
-                  value={newUpa.name}
-                  onChange={e => setNewUpa({...newUpa, name: e.target.value})}
+                  value={upaFormData.name}
+                  onChange={e => setUpaFormData({...upaFormData, name: e.target.value})}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -428,8 +458,8 @@ const AdminDashboard: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
                   <select 
                     className="w-full p-3 border border-slate-300 rounded-lg"
-                    value={newUpa.state}
-                    onChange={e => setNewUpa({...newUpa, state: e.target.value})}
+                    value={upaFormData.state}
+                    onChange={e => setUpaFormData({...upaFormData, state: e.target.value})}
                   >
                     <option value="">Selecione</option>
                     {LOCATIONS.map(l => <option key={l.state} value={l.state}>{l.state}</option>)}
@@ -441,8 +471,8 @@ const AdminDashboard: React.FC = () => {
                     type="text" 
                     className="w-full p-3 border border-slate-300 rounded-lg"
                     placeholder="Ex: Porto Alegre"
-                    value={newUpa.city}
-                    onChange={e => setNewUpa({...newUpa, city: e.target.value})}
+                    value={upaFormData.city}
+                    onChange={e => setUpaFormData({...upaFormData, city: e.target.value})}
                   />
                 </div>
               </div>
@@ -452,14 +482,48 @@ const AdminDashboard: React.FC = () => {
                   type="text" 
                   className="w-full p-3 border border-slate-300 rounded-lg"
                   placeholder="Logradouro, número, bairro..."
-                  value={newUpa.address}
-                  onChange={e => setNewUpa({...newUpa, address: e.target.value})}
+                  value={upaFormData.address}
+                  onChange={e => setUpaFormData({...upaFormData, address: e.target.value})}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Especialidades Disponíveis</label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {SPECIALTIES.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => handleToggleSpecialty(s)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                        upaFormData.specialties?.includes(s) 
+                        ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                        : 'border-slate-200 text-slate-500'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tempo de Espera</label>
+                <div className="flex gap-2">
+                  {['Baixo', 'Médio', 'Alto'].map(lvl => (
+                    <button 
+                      key={lvl}
+                      onClick={() => setUpaFormData({...upaFormData, waitingTime: lvl})}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${upaFormData.waitingTime === lvl ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 text-slate-600'}`}
+                    >
+                      {lvl.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-8">
-              <button onClick={() => setIsAddingUpa(false)} className="flex-1 py-4 border border-slate-200 rounded-xl font-bold">Cancelar</button>
-              <button onClick={handleAddUpa} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200">Salvar Unidade</button>
+              <button onClick={() => setIsUpaModalOpen(false)} className="flex-1 py-4 border border-slate-200 rounded-xl font-bold">Cancelar</button>
+              <button onClick={handleSaveUpa} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200">
+                {editingUpaId ? 'Atualizar Unidade' : 'Salvar Unidade'}
+              </button>
             </div>
           </div>
         </div>
