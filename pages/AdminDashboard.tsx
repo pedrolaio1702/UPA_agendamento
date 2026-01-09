@@ -1,21 +1,31 @@
 
 import React, { useState, useEffect } from 'react';
-import { Appointment, UPA, AdminRole, AdminUser } from '../types';
+import { Appointment, UPA, AdminRole, AdminUser, Doctor } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { UPAS as INITIAL_UPAS, LOCATIONS } from '../constants';
+import { UPAS as INITIAL_UPAS, LOCATIONS, SPECIALTIES } from '../constants';
 
 const AdminDashboard: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [upas, setUpas] = useState<UPA[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  
+  // Filters
+  const [doctorSpecialtyFilter, setDoctorSpecialtyFilter] = useState('');
   
   // Mock current logged in user (simulated)
   const [currentUser, setCurrentUser] = useState<AdminUser>({ role: 'GLOBAL' });
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'management'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'management' | 'doctors'>('dashboard');
 
   // UPA Registration Form State
   const [isAddingUpa, setIsAddingUpa] = useState(false);
   const [newUpa, setNewUpa] = useState<Partial<UPA>>({
     name: '', city: '', state: '', address: '', specialties: [], waitingTime: 'Médio'
+  });
+
+  // Doctor Registration Form State
+  const [isAddingDoctor, setIsAddingDoctor] = useState(false);
+  const [newDoctor, setNewDoctor] = useState<Partial<Doctor>>({
+    name: '', crm: '', specialty: '', upaId: '', active: true
   });
 
   useEffect(() => {
@@ -27,6 +37,9 @@ const AdminDashboard: React.FC = () => {
     if (!localStorage.getItem('upa_list')) {
       localStorage.setItem('upa_list', JSON.stringify(INITIAL_UPAS));
     }
+
+    const storedDoctors = JSON.parse(localStorage.getItem('doctor_list') || '[]');
+    setDoctors(storedDoctors);
   }, []);
 
   const handleAddUpa = () => {
@@ -43,7 +56,21 @@ const AdminDashboard: React.FC = () => {
     setNewUpa({ name: '', city: '', state: '', address: '', specialties: [], waitingTime: 'Médio' });
   };
 
-  // Filtering Logic based on Role
+  const handleAddDoctor = () => {
+    if (!newDoctor.name || !newDoctor.crm || !newDoctor.upaId || !newDoctor.specialty) return;
+    const doctorToAdd: Doctor = {
+      ...newDoctor as Doctor,
+      id: Math.random().toString(36).substr(2, 9),
+      active: true
+    };
+    const updatedDoctors = [...doctors, doctorToAdd];
+    setDoctors(updatedDoctors);
+    localStorage.setItem('doctor_list', JSON.stringify(updatedDoctors));
+    setIsAddingDoctor(false);
+    setNewDoctor({ name: '', crm: '', specialty: '', upaId: '', active: true });
+  };
+
+  // Filtering Logic based on Role and selected Filters
   const filteredAppointments = appointments.filter(a => {
     if (currentUser.role === 'GLOBAL') return true;
     const upa = upas.find(u => u.id === a.upaId);
@@ -57,6 +84,22 @@ const AdminDashboard: React.FC = () => {
     if (currentUser.role === 'STATE') return u.state === currentUser.state;
     if (currentUser.role === 'UPA') return u.id === currentUser.upaId;
     return false;
+  });
+
+  const filteredDoctors = doctors.filter(d => {
+    // Role filtering
+    let matchesRole = false;
+    if (currentUser.role === 'GLOBAL') matchesRole = true;
+    else {
+      const upa = upas.find(u => u.id === d.upaId);
+      if (currentUser.role === 'STATE') matchesRole = upa?.state === currentUser.state;
+      else if (currentUser.role === 'UPA') matchesRole = d.upaId === currentUser.upaId;
+    }
+
+    // Specialty filtering
+    const matchesSpecialty = !doctorSpecialtyFilter || d.specialty === doctorSpecialtyFilter;
+
+    return matchesRole && matchesSpecialty;
   });
 
   // Chart Data Preparation
@@ -115,24 +158,28 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex border-b border-slate-200 mb-8">
+      <div className="flex border-b border-slate-200 mb-8 overflow-x-auto whitespace-nowrap">
         <button 
           onClick={() => setActiveTab('dashboard')}
           className={`px-6 py-3 font-bold border-b-2 transition-all ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
         >
           Monitoramento (BI)
         </button>
-        {currentUser.role !== 'UPA' && (
-          <button 
-            onClick={() => setActiveTab('management')}
-            className={`px-6 py-3 font-bold border-b-2 transition-all ${activeTab === 'management' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-          >
-            Gestão de Unidades
-          </button>
-        )}
+        <button 
+          onClick={() => setActiveTab('management')}
+          className={`px-6 py-3 font-bold border-b-2 transition-all ${activeTab === 'management' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+        >
+          Gestão de Unidades
+        </button>
+        <button 
+          onClick={() => setActiveTab('doctors')}
+          className={`px-6 py-3 font-bold border-b-2 transition-all ${activeTab === 'doctors' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+        >
+          Médicos por UPA
+        </button>
       </div>
 
-      {activeTab === 'dashboard' ? (
+      {activeTab === 'dashboard' && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -211,63 +258,25 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
           </div>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="font-bold text-lg">Logs de Atividades Filtrados</h3>
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold">LIVE</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
-                  <tr>
-                    <th className="px-6 py-4">Data Log</th>
-                    <th className="px-6 py-4">Paciente</th>
-                    <th className="px-6 py-4">Unidade</th>
-                    <th className="px-6 py-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {filteredAppointments.slice(-10).reverse().map((a, i) => (
-                    <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 text-slate-500">22/05/2024</td>
-                      <td className="px-6 py-4 font-medium text-slate-800">{a.patientName}</td>
-                      <td className="px-6 py-4 text-slate-600">{a.upaName}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
-                          a.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 
-                          a.status === 'canceled' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                        }`}>
-                          {a.status.toUpperCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredAppointments.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-10 text-center text-slate-400">Nenhuma atividade encontrada neste escopo.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </>
-      ) : (
-        /* Management Tab - UPA CRUD */
+      )}
+
+      {activeTab === 'management' && (
         <div className="space-y-8 animate-in fade-in duration-300">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-slate-800">Unidades de Pronto Atendimento</h2>
               <p className="text-sm text-slate-500">Gestão cadastral e operacional das UPAs em seu território.</p>
             </div>
-            <button 
-              onClick={() => setIsAddingUpa(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-              Nova Unidade
-            </button>
+            {currentUser.role !== 'UPA' && (
+              <button 
+                onClick={() => setIsAddingUpa(true)}
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                Nova Unidade
+              </button>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -301,13 +310,13 @@ const AdminDashboard: React.FC = () => {
                         {upa.waitingTime.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-center">
                       <div className="flex gap-2">
+                        <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Ver Médicos desta UPA" onClick={() => { setActiveTab('doctors'); setNewDoctor({...newDoctor, upaId: upa.id}); }}>
+                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                        </button>
                         <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                        </button>
-                        <button className="p-2 text-slate-400 hover:text-red-600 transition-colors">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       </div>
                     </td>
@@ -316,88 +325,202 @@ const AdminDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
 
-          {/* Registration Modal Overlay */}
-          {isAddingUpa && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-200">
-                <h3 className="text-2xl font-bold mb-6">Cadastrar Nova UPA</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Unidade</label>
-                    <input 
-                      type="text" 
-                      className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                      placeholder="Ex: UPA Bom Jesus"
-                      value={newUpa.name}
-                      onChange={e => setNewUpa({...newUpa, name: e.target.value})}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
-                      <select 
-                        className="w-full p-3 border border-slate-300 rounded-lg"
-                        value={newUpa.state}
-                        onChange={e => setNewUpa({...newUpa, state: e.target.value})}
-                      >
-                        <option value="">Selecione</option>
-                        {LOCATIONS.map(l => <option key={l.state} value={l.state}>{l.state}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-3 border border-slate-300 rounded-lg"
-                        placeholder="Ex: Porto Alegre"
-                        value={newUpa.city}
-                        onChange={e => setNewUpa({...newUpa, city: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Endereço Completo</label>
-                    <input 
-                      type="text" 
-                      className="w-full p-3 border border-slate-300 rounded-lg"
-                      placeholder="Logradouro, número, bairro..."
-                      value={newUpa.address}
-                      onChange={e => setNewUpa({...newUpa, address: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Tempo de Espera Inicial</label>
-                    <div className="flex gap-2">
-                      {['Baixo', 'Médio', 'Alto'].map(lvl => (
-                        <button 
-                          key={lvl}
-                          onClick={() => setNewUpa({...newUpa, waitingTime: lvl})}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${newUpa.waitingTime === lvl ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 text-slate-600'}`}
-                        >
-                          {lvl.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+      {activeTab === 'doctors' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">Equipe Médica por UPA</h2>
+              <p className="text-sm text-slate-500">Cadastro e escala de profissionais ativos em cada unidade.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+               <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
+                 <span className="text-xs font-bold text-slate-400 uppercase">Filtrar por Especialidade:</span>
+                 <select 
+                  className="text-sm font-bold text-slate-700 outline-none bg-transparent"
+                  value={doctorSpecialtyFilter}
+                  onChange={(e) => setDoctorSpecialtyFilter(e.target.value)}
+                 >
+                   <option value="">Todas</option>
+                   {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+                 </select>
+               </div>
+              <button 
+                onClick={() => setIsAddingDoctor(true)}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                Novo Médico
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
+                <tr>
+                  <th className="px-6 py-4">Médico</th>
+                  <th className="px-6 py-4">CRM</th>
+                  <th className="px-6 py-4">Especialidade</th>
+                  <th className="px-6 py-4">Unidade Vinculada</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {filteredDoctors.map(doctor => {
+                  const upa = upas.find(u => u.id === doctor.upaId);
+                  return (
+                    <tr key={doctor.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800">{doctor.name}</td>
+                      <td className="px-6 py-4 text-slate-600">{doctor.crm}</td>
+                      <td className="px-6 py-4">
+                        <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-medium uppercase">
+                          {doctor.specialty}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {upa?.name || 'Não vinculada'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${doctor.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {doctor.active ? 'ATIVO' : 'INATIVO'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 flex gap-2">
+                         <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                         <button className="p-2 text-slate-400 hover:text-red-600 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredDoctors.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-10 text-center text-slate-400">Nenhum médico encontrado com estes filtros.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* UPA Registration Modal Overlay */}
+      {isAddingUpa && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-200">
+            <h3 className="text-2xl font-bold mb-6">Cadastrar Nova UPA</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Unidade</label>
+                <input 
+                  type="text" 
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Ex: UPA Bom Jesus"
+                  value={newUpa.name}
+                  onChange={e => setNewUpa({...newUpa, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
+                  <select 
+                    className="w-full p-3 border border-slate-300 rounded-lg"
+                    value={newUpa.state}
+                    onChange={e => setNewUpa({...newUpa, state: e.target.value})}
+                  >
+                    <option value="">Selecione</option>
+                    {LOCATIONS.map(l => <option key={l.state} value={l.state}>{l.state}</option>)}
+                  </select>
                 </div>
-                <div className="flex gap-3 mt-8">
-                  <button 
-                    onClick={() => setIsAddingUpa(false)}
-                    className="flex-1 py-4 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    onClick={handleAddUpa}
-                    className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
-                  >
-                    Salvar Unidade
-                  </button>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 border border-slate-300 rounded-lg"
+                    placeholder="Ex: Porto Alegre"
+                    value={newUpa.city}
+                    onChange={e => setNewUpa({...newUpa, city: e.target.value})}
+                  />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Endereço Completo</label>
+                <input 
+                  type="text" 
+                  className="w-full p-3 border border-slate-300 rounded-lg"
+                  placeholder="Logradouro, número, bairro..."
+                  value={newUpa.address}
+                  onChange={e => setNewUpa({...newUpa, address: e.target.value})}
+                />
+              </div>
             </div>
-          )}
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => setIsAddingUpa(false)} className="flex-1 py-4 border border-slate-200 rounded-xl font-bold">Cancelar</button>
+              <button onClick={handleAddUpa} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200">Salvar Unidade</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Registration Modal Overlay */}
+      {isAddingDoctor && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-200">
+            <h3 className="text-2xl font-bold mb-6">Cadastrar Médico</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Profissional</label>
+                <input 
+                  type="text" 
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Nome completo"
+                  value={newDoctor.name}
+                  onChange={e => setNewDoctor({...newDoctor, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">CRM</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 border border-slate-300 rounded-lg"
+                    placeholder="Número do Registro"
+                    value={newDoctor.crm}
+                    onChange={e => setNewDoctor({...newDoctor, crm: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Especialidade</label>
+                  <select 
+                    className="w-full p-3 border border-slate-300 rounded-lg"
+                    value={newDoctor.specialty}
+                    onChange={e => setNewDoctor({...newDoctor, specialty: e.target.value})}
+                  >
+                    <option value="">Selecione</option>
+                    {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Unidade de Lotação</label>
+                <select 
+                  className="w-full p-3 border border-slate-300 rounded-lg"
+                  value={newDoctor.upaId}
+                  onChange={e => setNewDoctor({...newDoctor, upaId: e.target.value})}
+                >
+                  <option value="">Selecione uma UPA</option>
+                  {filteredUpas.map(u => <option key={u.id} value={u.id}>{u.name} ({u.city})</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => setIsAddingDoctor(false)} className="flex-1 py-4 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-colors">Cancelar</button>
+              <button onClick={handleAddDoctor} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200">Vincular Médico</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

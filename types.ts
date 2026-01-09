@@ -14,6 +14,15 @@ export interface UPA {
   waitingTime: string; // "Baixo", "Médio", "Alto"
 }
 
+export interface Doctor {
+  id: string;
+  name: string;
+  crm: string;
+  specialty: string;
+  upaId: string;
+  active: boolean;
+}
+
 export interface TimeSlot {
   id: string;
   time: string;
