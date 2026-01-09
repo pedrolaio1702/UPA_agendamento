@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Step, UPA, Location, Appointment } from '../types';
+import { Step, UPA, Location, Appointment, Doctor } from '../types';
 import { LOCATIONS, UPAS, SPECIALTIES, TIMES } from '../constants';
 import { geminiService } from '../services/geminiService';
 
@@ -12,9 +12,13 @@ const ScheduleFlow: React.FC = () => {
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedUpa, setSelectedUpa] = useState<UPA | null>(null);
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [availableDoctors, setAvailableDoctors] = useState<Doctor[]>([]);
+
   const [patientName, setPatientName] = useState('');
   const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
@@ -25,6 +29,25 @@ const ScheduleFlow: React.FC = () => {
   const [loadingAdvice, setLoadingAdvice] = useState(false);
 
   const [appointmentResult, setAppointmentResult] = useState<Appointment | null>(null);
+
+  useEffect(() => {
+    const storedDoctors = JSON.parse(localStorage.getItem('doctor_list') || '[]');
+    setDoctors(storedDoctors);
+  }, []);
+
+  useEffect(() => {
+    if (selectedUpa && selectedSpecialty) {
+      const filtered = doctors.filter(d => 
+        d.upaId === selectedUpa.id && 
+        d.specialty === selectedSpecialty && 
+        d.active === true
+      );
+      setAvailableDoctors(filtered);
+      setSelectedDoctor(null); // Reset doctor when specialty or upa changes
+    } else {
+      setAvailableDoctors([]);
+    }
+  }, [selectedUpa, selectedSpecialty, doctors]);
 
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
@@ -54,6 +77,8 @@ const ScheduleFlow: React.FC = () => {
       phone,
       upaId: selectedUpa?.id || '',
       upaName: selectedUpa?.name || '',
+      doctorId: selectedDoctor?.id,
+      doctorName: selectedDoctor?.name,
       specialty: selectedSpecialty,
       date: selectedDate,
       time: selectedTime,
@@ -74,7 +99,7 @@ const ScheduleFlow: React.FC = () => {
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold">Termo de Consentimento</h2>
-            <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 h-64 overflow-y-auto text-sm text-slate-700 space-y-4">
+            <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 h-64 overflow-y-auto text-sm text-slate-700 space-y-4 text-justify">
               <p>Ao utilizar este sistema, você concorda com a coleta e processamento dos seus dados pessoais (Nome, CPF, E-mail, Telefone e Dados de Saúde) para fins exclusivos de agendamento de consultas nas Unidades de Pronto Atendimento (UPA).</p>
               <p>Garantimos a segurança dos dados conforme a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018). Seus dados não serão compartilhados com terceiros para fins comerciais.</p>
               <p><strong>Notificações:</strong> Você autoriza o envio de mensagens de confirmação e lembretes (24h antes) via SMS e/ou WhatsApp para o número informado.</p>
@@ -200,6 +225,27 @@ const ScheduleFlow: React.FC = () => {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Médico (Opcional)</label>
+                <select 
+                  className="w-full p-3 border border-slate-300 rounded-lg"
+                  value={selectedDoctor?.id || ''}
+                  disabled={!selectedSpecialty || availableDoctors.length === 0}
+                  onChange={(e) => {
+                    const doc = availableDoctors.find(d => d.id === e.target.value);
+                    setSelectedDoctor(doc || null);
+                  }}
+                >
+                  <option value="">Qualquer médico disponível</option>
+                  {availableDoctors.map(d => <option key={d.id} value={d.id}>{d.name} (CRM {d.crm})</option>)}
+                </select>
+                {!availableDoctors.length && selectedSpecialty && (
+                   <p className="text-[10px] text-slate-400 mt-1 uppercase italic">Nenhum médico específico ativo para esta especialidade agora.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
                 <input 
                   type="date" 
@@ -218,7 +264,7 @@ const ScheduleFlow: React.FC = () => {
                   <button
                     key={t}
                     onClick={() => setSelectedTime(t)}
-                    className={`p-2 text-sm border rounded-lg transition-all ${selectedTime === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}
+                    className={`p-2 text-sm border rounded-lg transition-all ${selectedTime === t ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'}`}
                   >
                     {t}
                   </button>
@@ -346,7 +392,7 @@ const ScheduleFlow: React.FC = () => {
               <button 
                 disabled={!patientName || cpf.length < 14 || !phone}
                 onClick={finishScheduling}
-                className={`flex-1 py-4 rounded-xl font-bold ${patientName && cpf.length === 14 && phone ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                className={`flex-1 py-4 rounded-xl font-bold ${patientName && cpf.length === 14 && phone ? 'bg-green-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
               >
                 Confirmar Agendamento
               </button>
@@ -356,8 +402,8 @@ const ScheduleFlow: React.FC = () => {
 
       case Step.CONFIRMATION:
         return (
-          <div className="text-center space-y-6">
-            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
+          <div className="text-center space-y-6 animate-in zoom-in duration-300">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
               <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
             </div>
             <h2 className="text-3xl font-extrabold text-slate-800">Agendamento Confirmado!</h2>
@@ -368,12 +414,15 @@ const ScheduleFlow: React.FC = () => {
             
             <div className="bg-white border-2 border-dashed border-slate-200 p-6 rounded-2xl text-left max-w-sm mx-auto shadow-sm">
               <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
-                <span className="text-xs font-bold text-slate-400">PROTOCOLO</span>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">PROTOCOLO</span>
                 <span className="text-sm font-mono font-bold text-blue-600">#{appointmentResult?.id.toUpperCase()}</span>
               </div>
               <div className="space-y-3">
                 <div><p className="text-[10px] text-slate-400 uppercase">Paciente</p><p className="font-bold text-slate-700">{appointmentResult?.patientName}</p></div>
                 <div><p className="text-[10px] text-slate-400 uppercase">Unidade</p><p className="font-bold text-slate-700">{appointmentResult?.upaName}</p></div>
+                {appointmentResult?.doctorName && (
+                   <div><p className="text-[10px] text-slate-400 uppercase">Médico Solicitado</p><p className="font-bold text-blue-800 underline decoration-blue-200">{appointmentResult?.doctorName}</p></div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                    <div><p className="text-[10px] text-slate-400 uppercase">Data</p><p className="font-bold text-slate-700">{appointmentResult?.date}</p></div>
                    <div><p className="text-[10px] text-slate-400 uppercase">Hora</p><p className="font-bold text-slate-700">{appointmentResult?.time}</p></div>
@@ -385,13 +434,13 @@ const ScheduleFlow: React.FC = () => {
             <div className="flex flex-col gap-3">
               <button 
                 onClick={() => window.print()}
-                className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors"
+                className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all shadow-md"
               >
                 Imprimir Comprovante
               </button>
               <button 
                 onClick={() => window.location.hash = '/'}
-                className="w-full py-4 border border-slate-300 rounded-xl font-bold hover:bg-slate-50 transition-colors"
+                className="w-full py-4 border border-slate-300 rounded-xl font-bold hover:bg-slate-50 transition-all"
               >
                 Voltar ao Início
               </button>
@@ -411,13 +460,13 @@ const ScheduleFlow: React.FC = () => {
         <div className="flex justify-between items-center mb-10">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex flex-col items-center flex-1 relative">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm z-10 ${
-                currentStep === i ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm z-10 transition-all ${
+                currentStep === i ? 'bg-blue-600 text-white ring-4 ring-blue-100 scale-110' : 
                 currentStep > i ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500'
               }`}>
                 {currentStep > i ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg> : i + 1}
               </div>
-              {i < 4 && <div className={`absolute left-1/2 w-full h-1 top-4 -translate-y-1/2 z-0 ${currentStep > i ? 'bg-green-500' : 'bg-slate-200'}`}></div>}
+              {i < 4 && <div className={`absolute left-1/2 w-full h-1 top-4 -translate-y-1/2 z-0 transition-colors duration-500 ${currentStep > i ? 'bg-green-500' : 'bg-slate-200'}`}></div>}
             </div>
           ))}
         </div>

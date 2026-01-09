@@ -37,6 +37,8 @@ export interface Appointment {
   phone: string;
   upaId: string;
   upaName: string;
+  doctorId?: string;
+  doctorName?: string;
   specialty: string;
   date: string;
   time: string;

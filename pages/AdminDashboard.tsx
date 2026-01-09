@@ -96,6 +96,12 @@ const AdminDashboard: React.FC = () => {
     setNewDoctor({ name: '', crm: '', specialty: '', upaId: '', active: true });
   };
 
+  const toggleDoctorStatus = (doctorId: string) => {
+    const updatedDoctors = doctors.map(d => d.id === doctorId ? { ...d, active: !d.active } : d);
+    setDoctors(updatedDoctors);
+    localStorage.setItem('doctor_list', JSON.stringify(updatedDoctors));
+  };
+
   // Filtering Logic based on Role and selected Filters
   const filteredAppointments = appointments.filter(a => {
     if (currentUser.role === 'GLOBAL') return true;
@@ -236,44 +242,42 @@ const AdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-bold mb-6">Produtividade por Unidade</h3>
-              <div className="h-64">
-                {barData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" fontSize={10} interval={0} />
-                      <YAxis fontSize={12} />
-                      <Tooltip />
-                      <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-400 italic">Dados insuficientes</div>
-                )}
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                  <BarChart data={barData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" fontSize={10} interval={0} />
+                    <YAxis fontSize={12} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-bold mb-6">Taxa de Ocupação/Status</h3>
-              <div className="h-64 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {statusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-2 ml-4 min-w-[120px]">
+              <div className="h-64 w-full flex items-center justify-center">
+                <div className="flex-grow h-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <PieChart>
+                      <Pie
+                        data={statusData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {statusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2 ml-4 min-w-[120px] shrink-0">
                   {statusData.map((s, i) => (
                     <div key={s.name} className="flex items-center gap-2 text-sm">
                       <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i]}}></div>
@@ -367,7 +371,7 @@ const AdminDashboard: React.FC = () => {
             </div>
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
-                 <span className="text-xs font-bold text-slate-400 uppercase">Filtrar por Especialidade:</span>
+                 <span className="text-xs font-bold text-slate-400 uppercase">Especialidade:</span>
                  <select 
                   className="text-sm font-bold text-slate-700 outline-none bg-transparent"
                   value={doctorSpecialtyFilter}
@@ -395,7 +399,7 @@ const AdminDashboard: React.FC = () => {
                   <th className="px-6 py-4">CRM</th>
                   <th className="px-6 py-4">Especialidade</th>
                   <th className="px-6 py-4">Unidade Vinculada</th>
-                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-center">Status</th>
                   <th className="px-6 py-4">Ações</th>
                 </tr>
               </thead>
@@ -403,9 +407,9 @@ const AdminDashboard: React.FC = () => {
                 {filteredDoctors.map(doctor => {
                   const upa = upas.find(u => u.id === doctor.upaId);
                   return (
-                    <tr key={doctor.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={doctor.id} className={`hover:bg-slate-50 transition-colors ${!doctor.active ? 'bg-slate-50/50 grayscale-[0.5]' : ''}`}>
                       <td className="px-6 py-4 font-bold text-slate-800">{doctor.name}</td>
-                      <td className="px-6 py-4 text-slate-600">{doctor.crm}</td>
+                      <td className="px-6 py-4 text-slate-600 font-mono">{doctor.crm}</td>
                       <td className="px-6 py-4">
                         <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-medium uppercase">
                           {doctor.specialty}
@@ -415,20 +419,36 @@ const AdminDashboard: React.FC = () => {
                         {upa?.name || 'Não vinculada'}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${doctor.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {doctor.active ? 'ATIVO' : 'INATIVO'}
-                        </span>
+                        <div className="flex justify-center">
+                          <button 
+                            onClick={() => toggleDoctorStatus(doctor.id)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shadow-sm ${
+                              doctor.active 
+                              ? 'bg-green-100 text-green-700 border border-green-200 hover:bg-green-200' 
+                              : 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-200'
+                            }`}
+                          >
+                            <div className={`w-2 h-2 rounded-full ${doctor.active ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            {doctor.active ? 'ATIVO' : 'INATIVO'}
+                          </button>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 flex gap-2">
-                         <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                         <button className="p-2 text-slate-400 hover:text-red-600 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                           <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Editar Médico">
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                           </button>
+                           <button className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Remover Médico">
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                           </button>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
                 {filteredDoctors.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-10 text-center text-slate-400">Nenhum médico encontrado com estes filtros.</td>
+                    <td colSpan={6} className="px-6 py-10 text-center text-slate-400 italic">Nenhum médico encontrado para esta unidade/especialidade.</td>
                   </tr>
                 )}
               </tbody>
